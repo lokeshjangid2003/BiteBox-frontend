@@ -34,23 +34,29 @@ const Dashboard = () => {
 
   useEffect(() => {
     // Set up real-time updates via Socket.io
+    // CRITICAL: Only listen to orders for restaurants owned by this user
     const socket = getSocket();
-    if (socket) {
+    if (socket && userRestaurants.length > 0) {
+      const restaurantIds = userRestaurants.map(r => r.id);
+      
       const handleOrderUpdate = (updatedOrder) => {
-        setRecentOrders((prevOrders) => {
-          const existingIndex = prevOrders.findIndex((o) => o.id === updatedOrder.id);
-          if (existingIndex >= 0) {
-            // Update existing order
-            const newOrders = [...prevOrders];
-            newOrders[existingIndex] = updatedOrder;
-            return newOrders;
-          } else {
-            // New order - add to beginning
-            return [updatedOrder, ...prevOrders].slice(0, 10);
-          }
-        });
-        // Recalculate stats
-        fetchDashboardData();
+        // CRITICAL: Only process orders for this user's restaurants
+        if (updatedOrder.restaurantId && restaurantIds.includes(updatedOrder.restaurantId)) {
+          setRecentOrders((prevOrders) => {
+            const existingIndex = prevOrders.findIndex((o) => o.id === updatedOrder.id);
+            if (existingIndex >= 0) {
+              // Update existing order
+              const newOrders = [...prevOrders];
+              newOrders[existingIndex] = updatedOrder;
+              return newOrders;
+            } else {
+              // New order - add to beginning (only if it belongs to this restaurant)
+              return [updatedOrder, ...prevOrders].slice(0, 10);
+            }
+          });
+          // Recalculate stats
+          fetchDashboardData();
+        }
       };
 
       socket.on('order:update', handleOrderUpdate);
@@ -58,7 +64,7 @@ const Dashboard = () => {
         socket.off('order:update', handleOrderUpdate);
       };
     }
-  }, []);
+  }, [userRestaurants]);
 
   const fetchDashboardData = async () => {
     try {
@@ -170,14 +176,14 @@ const Dashboard = () => {
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to BiteBox!</h1>
             <p className="text-gray-600 mb-6">
-              You don't have any restaurants yet. Create your first restaurant to get started.
+              Create your restaurant to get started.
             </p>
             <button
               onClick={() => setShowCreateModal(true)}
               className="btn-primary inline-flex items-center space-x-2"
             >
               <FiPlus className="w-5 h-5" />
-              <span>Create Your First Restaurant</span>
+              <span>Add Your Restaurant</span>
             </button>
           </div>
         </div>
@@ -296,20 +302,11 @@ const Dashboard = () => {
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           {userRestaurants.length > 0 && (
             <p className="text-gray-600 mt-1">
-              {userRestaurants.length === 1 
-                ? `Restaurant: ${userRestaurants[0].name}`
-                : `${userRestaurants.length} Restaurants`}
+              Restaurant: {userRestaurants[0].name}
             </p>
           )}
         </div>
         <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="btn-secondary flex items-center space-x-2"
-          >
-            <FiPlus className="w-5 h-5" />
-            <span>Add Restaurant</span>
-          </button>
           <button
             onClick={() => navigate('/restaurant/menu')}
             className="btn-primary flex items-center space-x-2"
@@ -504,110 +501,6 @@ const Dashboard = () => {
           </table>
         </div>
       </div>
-
-      {/* Create Restaurant Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 relative">
-            <button
-              onClick={() => setShowCreateModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-            >
-              <FiX className="w-6 h-6" />
-            </button>
-
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Create Restaurant</h2>
-
-            <form onSubmit={handleCreateRestaurant} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Restaurant Name *
-                </label>
-                <input
-                  type="text"
-                  value={restaurantForm.name}
-                  onChange={(e) => setRestaurantForm({ ...restaurantForm, name: e.target.value })}
-                  className="input-field"
-                  required
-                  placeholder="e.g., Pizza Palace"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={restaurantForm.description}
-                  onChange={(e) => setRestaurantForm({ ...restaurantForm, description: e.target.value })}
-                  className="input-field"
-                  rows="3"
-                  placeholder="Tell customers about your restaurant..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address *
-                </label>
-                <div className="relative">
-                  <FiMapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={restaurantForm.address}
-                    onChange={(e) => setRestaurantForm({ ...restaurantForm, address: e.target.value })}
-                    className="input-field pl-10"
-                    required
-                    placeholder="Restaurant address"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
-                <div className="relative">
-                  <FiPhone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="tel"
-                    value={restaurantForm.phone}
-                    onChange={(e) => setRestaurantForm({ ...restaurantForm, phone: e.target.value })}
-                    className="input-field pl-10"
-                    placeholder="Restaurant phone number"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Image URL
-                </label>
-                <input
-                  type="url"
-                  value={restaurantForm.imageUrl}
-                  onChange={(e) => setRestaurantForm({ ...restaurantForm, imageUrl: e.target.value })}
-                  className="input-field"
-                  placeholder="https://example.com/image.jpg"
-                />
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="flex-1 btn-primary">
-                  Create Restaurant
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

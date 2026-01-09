@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { orderAPI } from '../../services/api';
+import { orderAPI, restaurantAPI } from '../../services/api';
 import { formatPrice, formatDate, getStatusText, getStatusColor } from '../../utils/format';
 import { getSocket } from '../../services/socket';
+import { useAuth } from '../../context/AuthContext';
 import { FiSearch, FiPlus } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 
 const Orders = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -14,18 +16,44 @@ const Orders = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
+  const [userRestaurants, setUserRestaurants] = useState([]);
+
   useEffect(() => {
     fetchOrders();
+    fetchUserRestaurants();
+  }, [user]);
 
-    // Set up real-time updates
+  const fetchUserRestaurants = async () => {
+    try {
+      const response = await restaurantAPI.getAll();
+      const restaurants = response.data.filter(
+        (r) => r.ownerId === user?.id || r.owner?.id === user?.id
+      );
+      setUserRestaurants(restaurants);
+    } catch (error) {
+      console.error('Error fetching restaurants:', error);
+    }
+  };
+
+  useEffect(() => {
+    // Set up real-time updates - CRITICAL: Filter by restaurantId
     const socket = getSocket();
-    if (socket) {
-      socket.on('order:update', handleOrderUpdate);
+    if (socket && userRestaurants.length > 0) {
+      const restaurantIds = userRestaurants.map(r => r.id);
+      
+      const handleOrderUpdateFiltered = (updatedOrder) => {
+        // CRITICAL: Only process orders for this user's restaurants
+        if (updatedOrder.restaurantId && restaurantIds.includes(updatedOrder.restaurantId)) {
+          handleOrderUpdate(updatedOrder);
+        }
+      };
+
+      socket.on('order:update', handleOrderUpdateFiltered);
       return () => {
-        socket.off('order:update', handleOrderUpdate);
+        socket.off('order:update', handleOrderUpdateFiltered);
       };
     }
-  }, []);
+  }, [userRestaurants]);
 
   useEffect(() => {
     filterOrders();
